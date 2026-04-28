@@ -38,7 +38,13 @@ module LastPass
                 id = read_item io
                 name = decode_aes256_plain_auto read_item(io), encryption_key
                 group = decode_aes256_plain_auto read_item(io), encryption_key
-                url = decode_hex read_item io
+                url_raw = read_item io
+                # Shared-folder entries encrypt the URL field with AES-256 (prefixed
+                # with '!' for CBC or no prefix for ECB), while regular vault entries
+                # store it as a plain hex string. Detect which format we have.
+                url = url_raw.start_with?('!') || (url_raw.size % 2 != 0) ?
+                    decode_aes256_plain_auto(url_raw, encryption_key) :
+                    decode_hex(url_raw)
                 notes = decode_aes256_plain_auto read_item(io), encryption_key
                 2.times { skip_item io }
                 username = decode_aes256_plain_auto read_item(io), encryption_key
