@@ -57,12 +57,16 @@ module LastPass
                 case i.id
                 when "ACCT"
                     # TODO: Put shared folder name as group in the account
-                    account = Parser.parse_ACCT i, key
-                    case account
-                    when Account
-                        accounts << account
-                    when Note
-                        notes << account
+                    begin
+                        account = Parser.parse_ACCT i, key
+                        case account
+                        when Account
+                            accounts << account
+                        when Note
+                            notes << account
+                        end
+                    rescue ArgumentError
+                        # Skip malformed entries (e.g. odd-length hex URL field)
                     end
                 when "SHAR"
                     raise "private_key must be provided" if !private_key

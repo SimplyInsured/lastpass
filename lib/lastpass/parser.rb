@@ -99,32 +99,49 @@ module LastPass
             asn1_encoded_all = OpenSSL::ASN1.decode decode_hex hex_key
             asn1_encoded_key = OpenSSL::ASN1.decode asn1_encoded_all.value[2].value
 
-            rsa_key = OpenSSL::PKey::RSA.new
-            n = asn1_encoded_key.value[1].value
-            e = asn1_encoded_key.value[2].value
-            d = asn1_encoded_key.value[3].value
-            p = asn1_encoded_key.value[4].value
-            q = asn1_encoded_key.value[5].value
+            n    = asn1_encoded_key.value[1].value
+            e    = asn1_encoded_key.value[2].value
+            d    = asn1_encoded_key.value[3].value
+            p    = asn1_encoded_key.value[4].value
+            q    = asn1_encoded_key.value[5].value
             dmp1 = asn1_encoded_key.value[6].value
             dmq1 = asn1_encoded_key.value[7].value
             iqmp = asn1_encoded_key.value[8].value
 
-            if rsa_key.respond_to? :set_key
-                rsa_key.set_key n, e, d
-                rsa_key.set_factors p, q
-                rsa_key.set_crt_params dmp1, dmq1, iqmp
+            # OpenSSL 3.0 made RSA keys immutable — set_key/set_factors raise PKeyError.
+            # Build the key from a DER-encoded PKCS#1 RSAPrivateKey sequence instead,
+            # which works on all OpenSSL versions.
+            if OpenSSL::OPENSSL_VERSION_NUMBER >= 0x30000000
+                der = OpenSSL::ASN1::Sequence([
+                    OpenSSL::ASN1::Integer(OpenSSL::BN.new(0)),
+                    OpenSSL::ASN1::Integer(n),
+                    OpenSSL::ASN1::Integer(e),
+                    OpenSSL::ASN1::Integer(d),
+                    OpenSSL::ASN1::Integer(p),
+                    OpenSSL::ASN1::Integer(q),
+                    OpenSSL::ASN1::Integer(dmp1),
+                    OpenSSL::ASN1::Integer(dmq1),
+                    OpenSSL::ASN1::Integer(iqmp),
+                ]).to_der
+                OpenSSL::PKey::RSA.new(der)
             else
-                rsa_key.n = n
-                rsa_key.e = e
-                rsa_key.d = d
-                rsa_key.p = p
-                rsa_key.q = q
-                rsa_key.dmp1 = dmp1
-                rsa_key.dmq1 = dmq1
-                rsa_key.iqmp = iqmp
+                rsa_key = OpenSSL::PKey::RSA.new
+                if rsa_key.respond_to? :set_key
+                    rsa_key.set_key n, e, d
+                    rsa_key.set_factors p, q
+                    rsa_key.set_crt_params dmp1, dmq1, iqmp
+                else
+                    rsa_key.n = n
+                    rsa_key.e = e
+                    rsa_key.d = d
+                    rsa_key.p = p
+                    rsa_key.q = q
+                    rsa_key.dmp1 = dmp1
+                    rsa_key.dmq1 = dmq1
+                    rsa_key.iqmp = iqmp
+                end
+                rsa_key
             end
-
-            rsa_key
         end
 
         def self.parse_secure_note_server notes
